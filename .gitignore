@@ -1,0 +1,26 @@
+# Build output
+dist/
+/claude-code-status-line
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+
+# GoReleaser
+dist/

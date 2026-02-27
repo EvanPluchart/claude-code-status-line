@@ -1,0 +1,55 @@
+version: 2
+
+project_name: claude-code-status-line
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/claude-code-status-line
+    binary: claude-code-status-line
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^Chore"
+      - "^Style"
+      - "^Docs"
+
+brews:
+  - repository:
+      owner: EvanPluchart
+      name: homebrew-tap
+    homepage: "https://github.com/EvanPluchart/claude-code-status-line"
+    description: "A fully customizable, multi-line statusline for Claude Code"
+    license: "MIT"
+    install: |
+      bin.install "claude-code-status-line"
+
+release:
+  github:
+    owner: EvanPluchart
+    name: claude-code-status-line
