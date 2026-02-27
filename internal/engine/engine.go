@@ -25,7 +25,8 @@ func Render(input *parser.Input, cfg *config.Config) string {
 			continue
 		}
 
-		var parts []string
+		// Collect widget outputs, keeping track of which are separators.
+		var entries []entry
 
 		for _, widgetID := range line.Widgets {
 			w := widgets.Get(widgetID)
@@ -34,10 +35,18 @@ func Render(input *parser.Input, cfg *config.Config) string {
 			}
 
 			rendered := w.Render(ctx)
-			if rendered != "" {
-				parts = append(parts, rendered)
+			if rendered == "" {
+				continue
 			}
+
+			entries = append(entries, entry{
+				output:      rendered,
+				isSeparator: widgetID == "separator",
+			})
 		}
+
+		// Strip leading, trailing, and consecutive separators.
+		parts := cleanSeparators(entries)
 
 		if len(parts) > 0 {
 			lines = append(lines, strings.Join(parts, ""))
@@ -49,4 +58,35 @@ func Render(input *parser.Input, cfg *config.Config) string {
 	}
 
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// cleanSeparators removes leading, trailing, and consecutive separator entries.
+func cleanSeparators(entries []entry) []string {
+	var out []string
+	lastWasSep := true // treat start as separator to strip leading ones
+
+	for _, e := range entries {
+		if e.isSeparator {
+			if lastWasSep {
+				continue // skip consecutive or leading separator
+			}
+			lastWasSep = true
+		} else {
+			lastWasSep = false
+		}
+
+		out = append(out, e.output)
+	}
+
+	// Strip trailing separator
+	if len(out) > 0 && lastWasSep {
+		out = out[:len(out)-1]
+	}
+
+	return out
+}
+
+type entry struct {
+	output      string
+	isSeparator bool
 }
