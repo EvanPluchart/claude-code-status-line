@@ -7,6 +7,10 @@ type Translations struct {
 	RepoSingular   string
 	RepoPlural     string
 	CacheLabel     string
+	// Placeholders when info is unavailable
+	NoGitRepo      string
+	NoNestedRepos  string
+	NoLinesChanged string
 }
 
 var locales = map[string]Translations{
@@ -16,6 +20,9 @@ var locales = map[string]Translations{
 		RepoSingular:   "repo",
 		RepoPlural:     "repos",
 		CacheLabel:     "Cache",
+		NoGitRepo:      "no git repo",
+		NoNestedRepos:  "0 nested repos",
+		NoLinesChanged: "+0 -0",
 	},
 	"fr": {
 		GitStatusClean: "Propre",
@@ -23,6 +30,9 @@ var locales = map[string]Translations{
 		RepoSingular:   "depot",
 		RepoPlural:     "depots",
 		CacheLabel:     "Cache",
+		NoGitRepo:      "pas de repo git",
+		NoNestedRepos:  "0 depots imbriques",
+		NoLinesChanged: "+0 -0",
 	},
 }
 

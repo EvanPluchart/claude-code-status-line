@@ -36,7 +36,8 @@ func (w *GitBranchWidget) ID() string { return "git-branch" }
 func (w *GitBranchWidget) Render(ctx *Context) string {
 	branch, err := gitCommand(projectDir(ctx), "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil || branch == "" {
-		return ""
+		t := i18n.Get(ctx.Config.Locale)
+		return ansi.Colorize(t.NoGitRepo, ctx.Theme.Muted)
 	}
 
 	return ansi.Colorize(branch, ctx.Theme.Info)
@@ -50,7 +51,7 @@ func (w *GitStatusWidget) ID() string { return "git-status" }
 func (w *GitStatusWidget) Render(ctx *Context) string {
 	status, err := gitCommand(projectDir(ctx), "status", "--porcelain", "--no-optional-locks")
 	if err != nil {
-		return ""
+		return ansi.Colorize("-", ctx.Theme.Muted)
 	}
 
 	if status == "" {
@@ -66,9 +67,11 @@ type NestedReposWidget struct{}
 func (w *NestedReposWidget) ID() string { return "nested-repos" }
 
 func (w *NestedReposWidget) Render(ctx *Context) string {
+	t := i18n.Get(ctx.Config.Locale)
+
 	out, err := gitCommand(projectDir(ctx), "rev-parse", "--show-toplevel")
 	if err != nil || out == "" {
-		return ""
+		return ansi.Colorize(t.NoNestedRepos, ctx.Theme.Muted)
 	}
 
 	cmd := exec.Command("find", ".", "-maxdepth", "3", "-name", ".git", "-type", "d")
@@ -76,17 +79,16 @@ func (w *NestedReposWidget) Render(ctx *Context) string {
 
 	findOut, err := cmd.Output()
 	if err != nil {
-		return ""
+		return ansi.Colorize(t.NoNestedRepos, ctx.Theme.Muted)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(findOut)), "\n")
 	count := len(lines) - 1 // subtract root repo
 
 	if count <= 0 {
-		return ""
+		return ansi.Colorize(t.NoNestedRepos, ctx.Theme.Muted)
 	}
 
-	t := i18n.Get(ctx.Config.Locale)
 	label := t.RepoPlural
 
 	if count == 1 {

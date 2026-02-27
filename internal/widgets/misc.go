@@ -97,7 +97,7 @@ func (w *LinesChangedWidget) Render(ctx *Context) string {
 	removed := ctx.Input.Cost.TotalLinesRemoved
 
 	if added == 0 && removed == 0 {
-		return ""
+		return ansi.Colorize("+0", ctx.Theme.Muted) + " " + ansi.Colorize("-0", ctx.Theme.Muted)
 	}
 
 	return ansi.Colorize(fmt.Sprintf("+%d", added), ctx.Theme.Success) +
