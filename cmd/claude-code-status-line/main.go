@@ -383,12 +383,13 @@ func updateCmd() {
 		os.Exit(1)
 	}
 
-	if latest == version {
-		fmt.Fprintln(os.Stderr, "Already up to date ("+version+").")
+	current := strings.TrimPrefix(version, "v")
+	if latest == current {
+		fmt.Fprintln(os.Stderr, "Already up to date ("+current+").")
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "New version available: %s → %s\n", version, latest)
+	fmt.Fprintf(os.Stderr, "New version available: %s → %s\n", current, latest)
 
 	execPath, err := os.Executable()
 	if err != nil {
