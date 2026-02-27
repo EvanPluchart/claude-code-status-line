@@ -419,8 +419,34 @@ func updateCmd() {
 	fmt.Fprintf(os.Stderr, "Updated to %s successfully.\n", latest)
 }
 
+func ghToken() string {
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		return token
+	}
+
+	out, err := exec.Command("gh", "auth", "token").Output()
+	if err == nil {
+		return strings.TrimSpace(string(out))
+	}
+
+	return ""
+}
+
+func ghRequest(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if token := ghToken(); token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+
+	return http.DefaultClient.Do(req)
+}
+
 func fetchLatestVersion() (string, error) {
-	resp, err := http.Get("https://api.github.com/repos/EvanPluchart/claude-code-status-line/releases/latest")
+	resp, err := ghRequest("https://api.github.com/repos/EvanPluchart/claude-code-status-line/releases/latest")
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch release info: %w", err)
 	}
@@ -449,14 +475,11 @@ func selfUpdate(execPath, latest string) error {
 		ext = "zip"
 	}
 
-	url := fmt.Sprintf(
-		"https://github.com/EvanPluchart/claude-code-status-line/releases/download/v%s/claude-code-status-line_%s_%s_%s.%s",
-		latest, latest, goos, goarch, ext,
-	)
+	assetName := fmt.Sprintf("claude-code-status-line_%s_%s_%s.%s", latest, goos, goarch, ext)
 
-	fmt.Fprintf(os.Stderr, "Downloading %s...\n", url)
+	fmt.Fprintf(os.Stderr, "Downloading %s...\n", assetName)
 
-	resp, err := http.Get(url) //nolint:gosec // URL is constructed from known components
+	resp, err := downloadAsset(latest, assetName)
 	if err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
@@ -504,6 +527,64 @@ func selfUpdate(execPath, latest string) error {
 	_ = os.Remove(oldPath)
 
 	return nil
+}
+
+func downloadAsset(tag, assetName string) (*http.Response, error) {
+	// Try direct download first (works for public repos)
+	url := fmt.Sprintf(
+		"https://github.com/EvanPluchart/claude-code-status-line/releases/download/v%s/%s",
+		tag, assetName,
+	)
+
+	resp, err := ghRequest(url)
+	if err == nil && resp.StatusCode == http.StatusOK {
+		return resp, nil
+	}
+	if resp != nil {
+		resp.Body.Close()
+	}
+
+	// For private repos, find asset via API and download with octet-stream accept header
+	apiURL := "https://api.github.com/repos/EvanPluchart/claude-code-status-line/releases/tags/v" + tag
+	resp, err = ghRequest(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var release struct {
+		Assets []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, fmt.Errorf("failed to parse release: %w", err)
+	}
+
+	for _, asset := range release.Assets {
+		if asset.Name == assetName {
+			req, err := http.NewRequest("GET", asset.URL, nil)
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Accept", "application/octet-stream")
+			if token := ghToken(); token != "" {
+				req.Header.Set("Authorization", "token "+token)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to download asset: %w", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				resp.Body.Close()
+				return nil, fmt.Errorf("asset download returned status %d", resp.StatusCode)
+			}
+			return resp, nil
+		}
+	}
+
+	return nil, fmt.Errorf("asset %s not found in release v%s", assetName, tag)
 }
 
 func extractTarGz(r io.Reader, destDir, binaryName string) (string, error) {
