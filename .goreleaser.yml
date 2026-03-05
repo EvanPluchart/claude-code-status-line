@@ -43,6 +43,7 @@ brews:
   - repository:
       owner: EvanPluchart
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/EvanPluchart/claude-code-status-line"
     description: "A fully customizable, multi-line statusline for Claude Code"
     license: "MIT"
