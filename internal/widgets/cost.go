@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/EvanPluchart/claude-code-status-line/internal/ansi"
+	"github.com/EvanPluchart/claude-code-status-line/internal/exchange"
 )
 
 var currencySymbols = map[string]string{
@@ -15,7 +16,8 @@ var currencySymbols = map[string]string{
 	"CZK": "K\u010d", "TRY": "\u20ba", "RUB": "\u20bd", "ZAR": "R",
 }
 
-var exchangeRates = map[string]float64{
+// fallbackRates are used when the cached exchange rates are unavailable.
+var fallbackRates = map[string]float64{
 	"USD": 1, "EUR": 0.92, "GBP": 0.79, "JPY": 149.5,
 	"CAD": 1.36, "AUD": 1.53, "CHF": 0.88, "CNY": 7.24,
 	"KRW": 1320, "INR": 83.1, "BRL": 4.97, "MXN": 17.15,
@@ -51,7 +53,11 @@ func (w *CostWidget) Render(ctx *Context) string {
 		symbol = currency
 	}
 
-	rate := exchangeRates[currency]
+	rate, ok := exchange.GetRate(currency)
+	if !ok {
+		rate = fallbackRates[currency]
+	}
+
 	if rate == 0 {
 		rate = 1
 	}

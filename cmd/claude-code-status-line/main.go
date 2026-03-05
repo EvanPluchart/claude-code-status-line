@@ -16,6 +16,7 @@ import (
 
 	"github.com/EvanPluchart/claude-code-status-line/internal/config"
 	"github.com/EvanPluchart/claude-code-status-line/internal/engine"
+	"github.com/EvanPluchart/claude-code-status-line/internal/exchange"
 	"github.com/EvanPluchart/claude-code-status-line/internal/parser"
 	"github.com/EvanPluchart/claude-code-status-line/internal/wizard"
 )
@@ -37,6 +38,8 @@ func main() {
 		initCmd()
 	case "config":
 		configCmd()
+	case "update-rates":
+		updateRatesCmd()
 	case "update":
 		updateCmd()
 	case "uninstall":
@@ -108,6 +111,7 @@ func initCmd() {
 		}
 
 		fmt.Fprintf(os.Stderr, "  Configuration saved to %s\n", config.ConfigPath())
+		refreshExchangeRates()
 		registerInClaude()
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "  Done! Restart Claude Code to see your new statusline.")
@@ -136,6 +140,7 @@ func initCmd() {
 
 	fmt.Fprintf(os.Stderr, "  Configuration saved to %s\n", config.ConfigPath())
 
+	refreshExchangeRates()
 	registerInClaude()
 
 	fmt.Fprintln(os.Stderr, "")
@@ -668,6 +673,30 @@ func extractZip(r io.Reader, destDir, binaryName string) (string, error) {
 	return "", fmt.Errorf("binary %s not found in archive", binaryName)
 }
 
+func refreshExchangeRates() {
+	fmt.Fprint(os.Stderr, "  Fetching exchange rates...")
+
+	if err := exchange.Refresh(); err != nil {
+		fmt.Fprintln(os.Stderr, " skipped (will use fallback rates).")
+
+		return
+	}
+
+	fmt.Fprintln(os.Stderr, " done.")
+}
+
+func updateRatesCmd() {
+	fmt.Fprintln(os.Stderr, "Refreshing exchange rates...")
+
+	if err := exchange.Refresh(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintln(os.Stderr, "Fallback rates will be used.")
+		os.Exit(1)
+	}
+
+	fmt.Fprintln(os.Stderr, "Exchange rates updated.")
+}
+
 func printHelp() {
 	help := `claude-code-status-line - A customizable statusline for Claude Code
 
@@ -679,6 +708,7 @@ Commands:
   init          Interactive setup (config + register in Claude Code)
   config        Edit configuration
   update        Update to the latest version
+  update-rates  Refresh exchange rates cache
   uninstall     Remove config and unregister from Claude Code
   version       Show version
 
