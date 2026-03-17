@@ -11,28 +11,47 @@ type Translations struct {
 	NoGitRepo      string
 	NoNestedRepos  string
 	NoLinesChanged string
+	// Duration units
+	DurationMonths  string
+	DurationWeeks   string
+	DurationDays    string
+	DurationHours   string
+	DurationMinutes string
+	DurationSeconds string
 }
 
 var locales = map[string]Translations{
 	"en": {
-		GitStatusClean: "Clean",
-		GitStatusDirty: "Dirty",
-		RepoSingular:   "repo",
-		RepoPlural:     "repos",
-		CacheLabel:     "Cache",
-		NoGitRepo:      "no git repo",
-		NoNestedRepos:  "0 nested repos",
-		NoLinesChanged: "+0 -0",
+		GitStatusClean:  "Clean",
+		GitStatusDirty:  "Dirty",
+		RepoSingular:    "repo",
+		RepoPlural:      "repos",
+		CacheLabel:      "Cache",
+		NoGitRepo:       "no git repo",
+		NoNestedRepos:   "0 nested repos",
+		NoLinesChanged:  "+0 -0",
+		DurationMonths:  "mo",
+		DurationWeeks:   "w",
+		DurationDays:    "d",
+		DurationHours:   "h",
+		DurationMinutes: "m",
+		DurationSeconds: "s",
 	},
 	"fr": {
-		GitStatusClean: "Propre",
-		GitStatusDirty: "Modifie",
-		RepoSingular:   "depot",
-		RepoPlural:     "depots",
-		CacheLabel:     "Cache",
-		NoGitRepo:      "pas de repo git",
-		NoNestedRepos:  "0 depots imbriques",
-		NoLinesChanged: "+0 -0",
+		GitStatusClean:  "Propre",
+		GitStatusDirty:  "Modifie",
+		RepoSingular:    "depot",
+		RepoPlural:      "depots",
+		CacheLabel:      "Cache",
+		NoGitRepo:       "pas de repo git",
+		NoNestedRepos:   "0 depots imbriques",
+		NoLinesChanged:  "+0 -0",
+		DurationMonths:  "mo",
+		DurationWeeks:   "sem",
+		DurationDays:    "j",
+		DurationHours:   "h",
+		DurationMinutes: "min",
+		DurationSeconds: "s",
 	},
 }
 
