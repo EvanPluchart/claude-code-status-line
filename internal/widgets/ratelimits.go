@@ -4,68 +4,96 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/EvanPluchart/claude-code-status-line/internal/ansi"
+	"github.com/EvanPluchart/claude-code-status-line/internal/i18n"
 )
 
-// SessionBarWidget displays a progress bar for the 5-hour session rate limit.
-type SessionBarWidget struct{}
+// SessionUsageWidget displays the 5-hour session rate limit: label + bar + percent + (reset time).
+type SessionUsageWidget struct{}
 
-func (w *SessionBarWidget) ID() string { return "session-bar" }
+func (w *SessionUsageWidget) ID() string { return "session-usage" }
 
-func (w *SessionBarWidget) Render(ctx *Context) string {
+func (w *SessionUsageWidget) Render(ctx *Context) string {
 	if ctx.Input.RateLimits == nil || ctx.Input.RateLimits.FiveHour == nil {
 		return ""
 	}
 
-	pct := ctx.Input.RateLimits.FiveHour.UsedPercentage
+	t := i18n.Get(ctx.Config.Locale)
+	rl := ctx.Input.RateLimits.FiveHour
 
-	return renderRateLimitBar(pct, ctx)
+	return renderRateLimitWidget(t.SessionLabel, rl.UsedPercentage, rl.ResetsAt, ctx)
 }
 
-// SessionPercentWidget displays the 5-hour session rate limit percentage.
-type SessionPercentWidget struct{}
+// WeeklyUsageWidget displays the 7-day rate limit: label + bar + percent + (reset time).
+type WeeklyUsageWidget struct{}
 
-func (w *SessionPercentWidget) ID() string { return "session-percent" }
+func (w *WeeklyUsageWidget) ID() string { return "weekly-usage" }
 
-func (w *SessionPercentWidget) Render(ctx *Context) string {
-	if ctx.Input.RateLimits == nil || ctx.Input.RateLimits.FiveHour == nil {
-		return ""
-	}
-
-	pct := ctx.Input.RateLimits.FiveHour.UsedPercentage
-
-	return renderRateLimitPercent(pct, ctx)
-}
-
-// WeeklyBarWidget displays a progress bar for the 7-day rate limit.
-type WeeklyBarWidget struct{}
-
-func (w *WeeklyBarWidget) ID() string { return "weekly-bar" }
-
-func (w *WeeklyBarWidget) Render(ctx *Context) string {
+func (w *WeeklyUsageWidget) Render(ctx *Context) string {
 	if ctx.Input.RateLimits == nil || ctx.Input.RateLimits.SevenDay == nil {
 		return ""
 	}
 
-	pct := ctx.Input.RateLimits.SevenDay.UsedPercentage
+	t := i18n.Get(ctx.Config.Locale)
+	rl := ctx.Input.RateLimits.SevenDay
 
-	return renderRateLimitBar(pct, ctx)
+	return renderRateLimitWidget(t.WeeklyLabel, rl.UsedPercentage, rl.ResetsAt, ctx)
 }
 
-// WeeklyPercentWidget displays the 7-day rate limit percentage.
-type WeeklyPercentWidget struct{}
+// renderRateLimitWidget renders: label bar percent (reset time)
+func renderRateLimitWidget(label string, pct float64, resetsAt int64, ctx *Context) string {
+	t := i18n.Get(ctx.Config.Locale)
 
-func (w *WeeklyPercentWidget) ID() string { return "weekly-percent" }
+	// Label
+	labelStr := ansi.Colorize(label, ctx.Theme.Muted)
 
-func (w *WeeklyPercentWidget) Render(ctx *Context) string {
-	if ctx.Input.RateLimits == nil || ctx.Input.RateLimits.SevenDay == nil {
-		return ""
+	// Bar
+	barStr := renderRateLimitBar(pct, ctx)
+
+	// Percent
+	pctStr := renderRateLimitPercent(pct, ctx)
+
+	// Reset time
+	resetStr := ""
+
+	if resetsAt > 0 {
+		remaining := time.Until(time.Unix(resetsAt, 0))
+
+		if remaining > 0 {
+			resetStr = " " + ansi.Colorize(fmt.Sprintf("(%s %s)", t.ResetsIn, formatDuration(remaining, t)), ctx.Theme.Muted)
+		}
 	}
 
-	pct := ctx.Input.RateLimits.SevenDay.UsedPercentage
+	return labelStr + " " + barStr + " " + pctStr + resetStr
+}
 
-	return renderRateLimitPercent(pct, ctx)
+// formatDuration formats a duration using i18n units.
+func formatDuration(d time.Duration, t i18n.Translations) string {
+	totalSec := int64(d.Seconds())
+
+	days := totalSec / 86400
+	hours := (totalSec % 86400) / 3600
+	minutes := (totalSec % 3600) / 60
+
+	var parts []string
+
+	if days > 0 {
+		parts = append(parts, fmt.Sprintf("%d%s", days, t.DurationDays))
+	}
+
+	if hours > 0 || days > 0 {
+		parts = append(parts, fmt.Sprintf("%d%s", hours, t.DurationHours))
+	}
+
+	if len(parts) == 0 {
+		parts = append(parts, fmt.Sprintf("%d%s", minutes, t.DurationMinutes))
+	} else {
+		parts = append(parts, fmt.Sprintf("%02d%s", minutes, t.DurationMinutes))
+	}
+
+	return strings.Join(parts, "")
 }
 
 // renderRateLimitBar renders a progress bar for a rate limit percentage.

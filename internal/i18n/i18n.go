@@ -11,6 +11,10 @@ type Translations struct {
 	NoGitRepo      string
 	NoNestedRepos  string
 	NoLinesChanged string
+	// Rate limit labels
+	SessionLabel string
+	WeeklyLabel  string
+	ResetsIn     string
 	// Duration units
 	DurationMonths  string
 	DurationWeeks   string
@@ -30,6 +34,9 @@ var locales = map[string]Translations{
 		NoGitRepo:       "no git repo",
 		NoNestedRepos:   "0 nested repos",
 		NoLinesChanged:  "+0 -0",
+		SessionLabel:    "5h",
+		WeeklyLabel:     "7d",
+		ResetsIn:        "reset",
 		DurationMonths:  "mo",
 		DurationWeeks:   "w",
 		DurationDays:    "d",
@@ -46,6 +53,9 @@ var locales = map[string]Translations{
 		NoGitRepo:       "pas de repo git",
 		NoNestedRepos:   "0 depots imbriques",
 		NoLinesChanged:  "+0 -0",
+		SessionLabel:    "5h",
+		WeeklyLabel:     "7j",
+		ResetsIn:        "reset",
 		DurationMonths:  "mo",
 		DurationWeeks:   "sem",
 		DurationDays:    "j",

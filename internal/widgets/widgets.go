@@ -44,10 +44,8 @@ func init() {
 	register(&SpacerWidget{})
 	register(&VimModeWidget{})
 	register(&LinesChangedWidget{})
-	register(&SessionBarWidget{})
-	register(&SessionPercentWidget{})
-	register(&WeeklyBarWidget{})
-	register(&WeeklyPercentWidget{})
+	register(&SessionUsageWidget{})
+	register(&WeeklyUsageWidget{})
 }
 
 // Get returns a widget by ID, or nil if not found.

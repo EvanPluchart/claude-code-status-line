@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"strings"
+	"time"
 
 	"github.com/EvanPluchart/claude-code-status-line/internal/ansi"
 	"github.com/EvanPluchart/claude-code-status-line/internal/config"
@@ -56,8 +57,14 @@ func sampleInput() *parser.Input {
 			},
 		},
 		RateLimits: &parser.RateLimits{
-			FiveHour: &parser.RateLimit{UsedPercentage: 23.5},
-			SevenDay: &parser.RateLimit{UsedPercentage: 41.2},
+			FiveHour: &parser.RateLimit{
+				UsedPercentage: 23.5,
+				ResetsAt:       time.Now().Add(3*time.Hour + 42*time.Minute).Unix(),
+			},
+			SevenDay: &parser.RateLimit{
+				UsedPercentage: 41.2,
+				ResetsAt:       time.Now().Add(4*24*time.Hour + 8*time.Hour).Unix(),
+			},
 		},
 		Vim: &parser.Vim{Mode: "normal"},
 	}

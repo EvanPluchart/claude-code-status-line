@@ -49,10 +49,8 @@ var widgetOrder = []string{
 	"timestamp",
 	"os-info",
 	"nested-repos",
-	"session-bar",
-	"session-percent",
-	"weekly-bar",
-	"weekly-percent",
+	"session-usage",
+	"weekly-usage",
 }
 
 // widgetLabels maps widget IDs to human-readable descriptions.
@@ -73,10 +71,8 @@ var widgetLabels = map[string]string{
 	"timestamp":       "Current time",
 	"os-info":         "OS and architecture",
 	"nested-repos":    "Nested git repositories count",
-	"session-bar":     "Session rate limit bar (5h)",
-	"session-percent": "Session rate limit % (5h)",
-	"weekly-bar":      "Weekly rate limit bar (7d)",
-	"weekly-percent":  "Weekly rate limit % (7d)",
+	"session-usage":   "Session rate limit (5h bar + reset)",
+	"weekly-usage":    "Weekly rate limit (7d bar + reset)",
 }
 
 func buildSteps() []StepDef {
