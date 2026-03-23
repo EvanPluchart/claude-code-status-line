@@ -51,6 +51,18 @@ type Agent struct {
 	Name string `json:"name"`
 }
 
+// RateLimit represents a single rate limit window.
+type RateLimit struct {
+	UsedPercentage float64 `json:"used_percentage"`
+	ResetsAt       int64   `json:"resets_at"`
+}
+
+// RateLimits holds the session and weekly rate limits.
+type RateLimits struct {
+	FiveHour *RateLimit `json:"five_hour,omitempty"`
+	SevenDay *RateLimit `json:"seven_day,omitempty"`
+}
+
 // Input is the full JSON payload from Claude Code.
 type Input struct {
 	CWD              string        `json:"cwd"`
@@ -62,6 +74,7 @@ type Input struct {
 	Cost             Cost          `json:"cost"`
 	ContextWindow    ContextWindow `json:"context_window"`
 	Exceeds200K      bool          `json:"exceeds_200k_tokens"`
+	RateLimits       *RateLimits   `json:"rate_limits,omitempty"`
 	Vim              *Vim          `json:"vim,omitempty"`
 	Agent            *Agent        `json:"agent,omitempty"`
 }

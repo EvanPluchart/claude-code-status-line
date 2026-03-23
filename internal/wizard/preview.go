@@ -55,6 +55,10 @@ func sampleInput() *parser.Input {
 				CacheReadInputTokens:     30000,
 			},
 		},
+		RateLimits: &parser.RateLimits{
+			FiveHour: &parser.RateLimit{UsedPercentage: 23.5},
+			SevenDay: &parser.RateLimit{UsedPercentage: 41.2},
+		},
 		Vim: &parser.Vim{Mode: "normal"},
 	}
 }
