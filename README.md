@@ -25,6 +25,7 @@ A fully customizable, multi-line statusline for [Claude Code](https://code.claud
 
 ```bash
 brew tap EvanPluchart/tap
+brew trust EvanPluchart/tap   # recent Homebrew versions require approving third-party taps
 brew install claude-code-status-line
 ```
 
