@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"sort"
+
 	"github.com/EvanPluchart/claude-code-status-line/internal/config"
 	"github.com/EvanPluchart/claude-code-status-line/internal/parser"
 	"github.com/EvanPluchart/claude-code-status-line/internal/themes"
@@ -26,26 +28,54 @@ func register(w Widget) {
 }
 
 func init() {
+	// Session
 	register(&ModelWidget{})
+	register(&EffortWidget{})
+	register(&ThinkingWidget{})
+	register(&FastModeWidget{})
+	register(&AgentWidget{})
+	register(&OutputStyleWidget{})
+	register(&SessionNameWidget{})
+	register(&ClaudeVersionWidget{})
+	register(&VimModeWidget{})
+
+	// Workspace & git
 	register(&DirectoryWidget{})
+	register(&RepoWidget{})
+	register(&WorktreeWidget{})
 	register(&GitBranchWidget{})
 	register(&GitStatusWidget{})
+	register(&GitChangesWidget{})
+	register(&GitAheadBehindWidget{})
+	register(&PRWidget{})
 	register(&NestedReposWidget{})
-	register(&CostWidget{})
-	register(&TokenBarWidget{})
-	register(&TokenCountWidget{})
-	register(&DurationWidget{})
-	register(&ContextPercentWidget{})
-	register(&TimestampWidget{})
-	register(&CacheRatioWidget{})
-	register(&TotalTokensWidget{})
-	register(&OSInfoWidget{})
-	register(&SeparatorWidget{})
-	register(&SpacerWidget{})
-	register(&VimModeWidget{})
 	register(&LinesChangedWidget{})
+
+	// Cost & time
+	register(&CostWidget{})
+	register(&BurnRateWidget{})
+	register(&DurationWidget{})
+	register(&APITimeWidget{})
+	register(&TimestampWidget{})
+
+	// Context & tokens
+	register(&TokenBarWidget{})
+	register(&ContextPercentWidget{})
+	register(&TokenCountWidget{})
+	register(&ContextRemainingWidget{})
+	register(&TotalTokensWidget{})
+	register(&CacheRatioWidget{})
+	register(&Exceeds200KWidget{})
+
+	// Rate limits
 	register(&SessionUsageWidget{})
 	register(&WeeklyUsageWidget{})
+
+	// Layout & system
+	register(&OSInfoWidget{})
+	register(&HostnameWidget{})
+	register(&SeparatorWidget{})
+	register(&SpacerWidget{})
 }
 
 // Get returns a widget by ID, or nil if not found.
@@ -53,13 +83,15 @@ func Get(id string) Widget {
 	return registry[id]
 }
 
-// IDs returns all registered widget IDs.
+// IDs returns all registered widget IDs, sorted.
 func IDs() []string {
 	ids := make([]string, 0, len(registry))
 
 	for id := range registry {
 		ids = append(ids, id)
 	}
+
+	sort.Strings(ids)
 
 	return ids
 }

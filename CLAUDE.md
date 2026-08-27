@@ -21,7 +21,8 @@ internal/
   i18n/                        # Internationalisation (en, fr)
   parser/                      # Parsing du JSON stdin Claude Code
   themes/                      # Themes de couleurs (6 themes)
-  widgets/                     # 18 widgets (model, cost, tokens, git, etc.)
+  exchange/                    # Cache des taux de change (refresh detache)
+  widgets/                     # 37 widgets (model, cost, tokens, git, session, etc.)
   wizard/                      # Wizard interactif de configuration
 docs/                          # Documentation projet
 .github/workflows/             # CI (ci.yml) + Release (release.yml)
@@ -47,7 +48,7 @@ docs/                          # Documentation projet
 ## Regles de code
 
 - **Formatage** : `gofmt` + `goimports` (CI enforced)
-- **Linter** : `golangci-lint` (errcheck, govet, staticcheck, unused, ineffassign, gosimple, misspell)
+- **Linter** : `golangci-lint` v2 (errcheck, govet, staticcheck, unused, ineffassign, misspell + gofmt/goimports)
 - **Imports** : 3 groupes separes par des lignes vides (stdlib / external / internal)
 - **Booleens** : prefixes `is`, `has`, `should`, `can`, `will`
 - **Espacement** : lignes vides avant/apres conditions, boucles, et avant `return`
@@ -60,6 +61,7 @@ docs/                          # Documentation projet
 |----------|-------------|
 | `make build` | Build le binaire |
 | `make test` | Lance les tests |
+| `make check` | fmt + lint + test |
 | `make lint` | Lance golangci-lint |
 | `make clean` | Nettoie les artefacts |
 | `make install` | Build + installe dans ~/.local/bin |
@@ -88,7 +90,9 @@ docs/                          # Documentation projet
 - Le binaire doit rester rapide (~5ms) — pas de deps lourdes
 - Cross-platform : tester les chemins et comportements sur macOS, Linux, Windows
 - Le JSON stdin vient de Claude Code — parser defensivement
-- 3 lignes max dans la statusline, 18 widgets disponibles
+- 3 lignes max dans la statusline, 37 widgets disponibles (`claude-code-status-line widgets`)
+- Le rendu ne doit jamais faire de reseau : le refresh des taux passe par un process detache
+- Tester un rendu sans Claude Code : `claude-code-status-line preview [--stdin < payload.json]`
 - Releases via GoReleaser + Homebrew tap
 
 ## Skills recommandes

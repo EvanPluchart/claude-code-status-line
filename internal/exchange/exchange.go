@@ -1,18 +1,28 @@
+// Package exchange manages the USD exchange rates cache used by the cost widget.
+//
+// The render path never performs network calls: it only reads the on-disk cache.
+// When the cache is stale, a detached background process is spawned to refresh it
+// so that the statusline stays within its execution budget.
 package exchange
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/EvanPluchart/claude-code-status-line/internal/config"
 )
 
 const (
 	apiURL       = "https://open.er-api.com/v6/latest/USD"
 	maxAge       = 24 * time.Hour
-	fetchTimeout = 3 * time.Second
+	retryDelay   = 30 * time.Minute
+	fetchTimeout = 5 * time.Second
 )
 
 // CachedRates is the on-disk cache structure.
@@ -27,19 +37,22 @@ var (
 )
 
 func cachePath() string {
-	home, _ := os.UserHomeDir()
-
-	return filepath.Join(home, ".claude-statusline", "rates.json")
+	return filepath.Join(config.ConfigDir(), "rates.json")
 }
 
-// GetRate returns the exchange rate for a currency.
-// It loads from cache, refreshes in the background if stale, and returns 0 if unknown.
+// attemptPath marks the last background refresh attempt to avoid spawn storms.
+func attemptPath() string {
+	return filepath.Join(config.ConfigDir(), "rates.attempt")
+}
+
+// GetRate returns the exchange rate for a currency from the local cache.
+// When the cache is stale, a background refresh is scheduled.
 func GetRate(currency string) (float64, bool) {
 	once.Do(func() {
 		cachedData = loadCache()
 
-		if cachedData != nil && time.Since(cachedData.UpdatedAt) > maxAge {
-			go refreshCache()
+		if cachedData == nil || time.Since(cachedData.UpdatedAt) > maxAge {
+			scheduleRefresh()
 		}
 	})
 
@@ -67,27 +80,41 @@ func loadCache() *CachedRates {
 	return &cached
 }
 
-func refreshCache() {
-	rates, err := fetchRates()
+// scheduleRefresh spawns a detached "update-rates" process, at most once per retryDelay.
+func scheduleRefresh() {
+	if os.Getenv("CLAUDE_STATUSLINE_OFFLINE") != "" {
+		return
+	}
+
+	if info, err := os.Stat(attemptPath()); err == nil && time.Since(info.ModTime()) < retryDelay {
+		return
+	}
+
+	if err := os.MkdirAll(config.ConfigDir(), 0o755); err != nil {
+		return
+	}
+
+	if err := os.WriteFile(attemptPath(), []byte(time.Now().Format(time.RFC3339)), 0o644); err != nil {
+		return
+	}
+
+	self, err := os.Executable()
 	if err != nil {
 		return
 	}
 
-	cached := &CachedRates{
-		UpdatedAt: time.Now(),
-		Rates:     rates,
-	}
+	cmd := exec.Command(self, "update-rates", "--quiet")
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	detach(cmd)
 
-	data, err := json.Marshal(cached)
-	if err != nil {
+	if err := cmd.Start(); err != nil {
 		return
 	}
 
-	dir := filepath.Dir(cachePath())
-	_ = os.MkdirAll(dir, 0o755)
-	_ = os.WriteFile(cachePath(), data, 0o644)
-
-	cachedData = cached
+	// Release the child so it outlives this process.
+	_ = cmd.Process.Release()
 }
 
 func fetchRates() (map[string]float64, error) {
@@ -95,23 +122,30 @@ func fetchRates() (map[string]float64, error) {
 
 	resp, err := client.Get(apiURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch rates: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch rates: unexpected status %d", resp.StatusCode)
+	}
 
 	var result struct {
 		Rates map[string]float64 `json:"rates"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode rates: %w", err)
+	}
+
+	if len(result.Rates) == 0 {
+		return nil, fmt.Errorf("decode rates: empty response")
 	}
 
 	return result.Rates, nil
 }
 
 // Refresh forces a synchronous refresh of the exchange rates cache.
-// Returns an error if the fetch fails.
 func Refresh() error {
 	rates, err := fetchRates()
 	if err != nil {
@@ -125,14 +159,29 @@ func Refresh() error {
 
 	data, err := json.Marshal(cached)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode rates: %w", err)
 	}
 
-	dir := filepath.Dir(cachePath())
-	_ = os.MkdirAll(dir, 0o755)
-	_ = os.WriteFile(cachePath(), data, 0o644)
+	if err := os.MkdirAll(filepath.Dir(cachePath()), 0o755); err != nil {
+		return fmt.Errorf("create cache dir: %w", err)
+	}
+
+	if err := os.WriteFile(cachePath(), data, 0o644); err != nil {
+		return fmt.Errorf("write cache: %w", err)
+	}
 
 	cachedData = cached
 
 	return nil
+}
+
+// CacheAge returns how old the on-disk cache is, and false when there is no cache.
+func CacheAge() (time.Duration, bool) {
+	cached := loadCache()
+
+	if cached == nil {
+		return 0, false
+	}
+
+	return time.Since(cached.UpdatedAt), true
 }

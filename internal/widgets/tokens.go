@@ -6,54 +6,67 @@ import (
 	"strings"
 
 	"github.com/EvanPluchart/claude-code-status-line/internal/ansi"
+	"github.com/EvanPluchart/claude-code-status-line/internal/config"
 	"github.com/EvanPluchart/claude-code-status-line/internal/i18n"
 )
 
+// formatTokens renders a token count in a compact form (1.2k, 3.4M).
 func formatTokens(count int) string {
 	if count >= 1_000_000 {
-		return fmt.Sprintf("%.1fM", float64(count)/1_000_000)
+		return trimZero(fmt.Sprintf("%.1f", float64(count)/1_000_000)) + "M"
 	}
 
 	if count >= 1_000 {
-		return fmt.Sprintf("%.1fk", float64(count)/1_000)
+		return trimZero(fmt.Sprintf("%.1f", float64(count)/1_000)) + "k"
 	}
 
 	return fmt.Sprintf("%d", count)
 }
 
-func barColor(pct float64, ctx *Context) string {
-	if pct >= 90 {
+// trimZero strips a trailing ".0" so that 200.0k becomes 200k.
+func trimZero(s string) string {
+	return strings.TrimSuffix(s, ".0")
+}
+
+// thresholdColor maps a value to a theme color using a threshold group.
+// Values at or above red are rendered bold.
+func thresholdColor(value float64, t config.ThresholdGroup, ctx *Context) string {
+	if value >= t.Red {
+		return ctx.Theme.Danger + ansi.Bold
+	}
+
+	if value >= t.Orange {
 		return ctx.Theme.Danger
 	}
 
-	if pct >= 70 {
+	if value >= t.Yellow {
 		return ctx.Theme.Warning
 	}
 
 	return ctx.Theme.Success
 }
 
-// TokenBarWidget displays a progress bar for context usage.
-type TokenBarWidget struct{}
+// contextColor returns the color for a context usage percentage.
+func contextColor(pct float64, ctx *Context) string {
+	return thresholdColor(pct, ctx.Config.Thresholds.Context, ctx)
+}
 
-func (w *TokenBarWidget) ID() string { return "token-bar" }
-
-func (w *TokenBarWidget) Render(ctx *Context) string {
-	pct := ctx.Input.ContextWindow.UsedPercentage
+// renderBar renders a progress bar colored by the given threshold group.
+func renderBar(pct float64, t config.ThresholdGroup, ctx *Context) string {
 	width := ctx.Config.Widgets.TokenBar.Width
 	filledChar := ctx.Config.Widgets.TokenBar.FilledChar
 	emptyChar := ctx.Config.Widgets.TokenBar.EmptyChar
 
-	if width == 0 {
+	if width <= 0 {
 		width = 16
 	}
 
 	if filledChar == "" {
-		filledChar = "\u2501"
+		filledChar = "━"
 	}
 
 	if emptyChar == "" {
-		emptyChar = "\u2500"
+		emptyChar = "─"
 	}
 
 	clamped := math.Max(0, math.Min(100, pct))
@@ -63,7 +76,23 @@ func (w *TokenBarWidget) Render(ctx *Context) string {
 	filledStr := strings.Repeat(filledChar, filled)
 	emptyStr := strings.Repeat(emptyChar, empty)
 
-	return barColor(pct, ctx) + filledStr + ansi.RST + ansi.Colorize(emptyStr, ctx.Theme.BarEmpty)
+	return ansi.Colorize(filledStr, thresholdColor(pct, t, ctx)) + ansi.Colorize(emptyStr, ctx.Theme.BarEmpty)
+}
+
+// renderPercent renders a percentage colored by the given threshold group.
+func renderPercent(pct float64, t config.ThresholdGroup, ctx *Context) string {
+	rounded := int(math.Round(pct))
+
+	return ansi.Colorize(fmt.Sprintf("%d%%", rounded), thresholdColor(float64(rounded), t, ctx))
+}
+
+// TokenBarWidget displays a progress bar for context usage.
+type TokenBarWidget struct{}
+
+func (w *TokenBarWidget) ID() string { return "token-bar" }
+
+func (w *TokenBarWidget) Render(ctx *Context) string {
+	return renderBar(ctx.Input.ContextWindow.UsedPercentage, ctx.Config.Thresholds.Context, ctx)
 }
 
 // ContextPercentWidget displays the context usage percentage.
@@ -72,18 +101,7 @@ type ContextPercentWidget struct{}
 func (w *ContextPercentWidget) ID() string { return "context-percent" }
 
 func (w *ContextPercentWidget) Render(ctx *Context) string {
-	pct := int(math.Round(ctx.Input.ContextWindow.UsedPercentage))
-	text := fmt.Sprintf("%d%%", pct)
-
-	color := ctx.Theme.Success
-
-	if pct >= 90 {
-		color = ctx.Theme.Danger + ansi.Bold
-	} else if pct >= 70 {
-		color = ctx.Theme.Warning
-	}
-
-	return color + text + ansi.RST
+	return renderPercent(ctx.Input.ContextWindow.UsedPercentage, ctx.Config.Thresholds.Context, ctx)
 }
 
 // TokenCountWidget displays used/max tokens.
@@ -93,15 +111,28 @@ func (w *TokenCountWidget) ID() string { return "token-count" }
 
 func (w *TokenCountWidget) Render(ctx *Context) string {
 	cw := ctx.Input.ContextWindow
-	used := cw.CurrentUsage.InputTokens + cw.CurrentUsage.CacheCreationInputTokens + cw.CurrentUsage.CacheReadInputTokens
-
-	if used == 0 {
-		used = int(float64(cw.ContextWindowSize) * cw.UsedPercentage / 100)
-	}
-
-	text := fmt.Sprintf("(%s/%s)", formatTokens(used), formatTokens(cw.ContextWindowSize))
+	text := fmt.Sprintf("(%s/%s)", formatTokens(cw.UsedTokens()), formatTokens(cw.ContextWindowSize))
 
 	return ansi.Colorize(text, ctx.Theme.Muted)
+}
+
+// ContextRemainingWidget displays the number of tokens left before the context is full.
+type ContextRemainingWidget struct{}
+
+func (w *ContextRemainingWidget) ID() string { return "context-remaining" }
+
+func (w *ContextRemainingWidget) Render(ctx *Context) string {
+	cw := ctx.Input.ContextWindow
+	remaining := cw.ContextWindowSize - cw.UsedTokens()
+
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	t := i18n.Get(ctx.Config.Locale)
+	text := fmt.Sprintf("%s %s", formatTokens(remaining), t.RemainingLabel)
+
+	return ansi.Colorize(text, contextColor(cw.UsedPercentage, ctx))
 }
 
 // TotalTokensWidget displays total input/output tokens.
@@ -113,7 +144,7 @@ func (w *TotalTokensWidget) Render(ctx *Context) string {
 	input := ctx.Input.ContextWindow.TotalInputTokens
 	output := ctx.Input.ContextWindow.TotalOutputTokens
 
-	text := fmt.Sprintf("\u2191%s \u2193%s", formatTokens(input), formatTokens(output))
+	text := fmt.Sprintf("↑%s ↓%s", formatTokens(input), formatTokens(output))
 
 	return ansi.Colorize(text, ctx.Theme.Muted)
 }
@@ -131,8 +162,21 @@ func (w *CacheRatioWidget) Render(ctx *Context) string {
 		return ""
 	}
 
-	ratio := int(float64(usage.CacheReadInputTokens) / float64(total) * 100)
+	ratio := int(math.Round(float64(usage.CacheReadInputTokens) / float64(total) * 100))
 	t := i18n.Get(ctx.Config.Locale)
 
 	return ansi.Colorize(fmt.Sprintf("%s: %d%%", t.CacheLabel, ratio), ctx.Theme.Muted)
+}
+
+// Exceeds200KWidget shows a marker when the conversation exceeds 200k tokens.
+type Exceeds200KWidget struct{}
+
+func (w *Exceeds200KWidget) ID() string { return "exceeds-200k" }
+
+func (w *Exceeds200KWidget) Render(ctx *Context) string {
+	if !ctx.Input.Exceeds200K {
+		return ""
+	}
+
+	return ansi.ColorBold(">200k", ctx.Theme.Warning)
 }

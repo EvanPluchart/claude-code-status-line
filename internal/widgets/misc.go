@@ -2,9 +2,9 @@ package widgets
 
 import (
 	"fmt"
-	"os/exec"
-	"path/filepath"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,14 +17,20 @@ type TimestampWidget struct{}
 func (w *TimestampWidget) ID() string { return "timestamp" }
 
 func (w *TimestampWidget) Render(ctx *Context) string {
-	now := time.Now()
 	format := "15:04"
 
 	if ctx.Config.Widgets.Timestamp.ShowSeconds {
 		format = "15:04:05"
 	}
 
-	return ansi.Colorize(now.Format(format), ctx.Theme.Muted)
+	return ansi.Colorize(time.Now().Format(format), ctx.Theme.Muted)
+}
+
+var osNames = map[string]string{
+	"darwin":  "macOS",
+	"linux":   "Linux",
+	"windows": "Windows",
+	"freebsd": "FreeBSD",
 }
 
 // OSInfoWidget displays the OS and architecture.
@@ -33,19 +39,31 @@ type OSInfoWidget struct{}
 func (w *OSInfoWidget) ID() string { return "os-info" }
 
 func (w *OSInfoWidget) Render(ctx *Context) string {
-	osNames := map[string]string{
-		"darwin":  "macOS",
-		"linux":   "Linux",
-		"windows": "Windows",
-		"freebsd": "FreeBSD",
-	}
-
 	name := osNames[runtime.GOOS]
+
 	if name == "" {
 		name = runtime.GOOS
 	}
 
 	return ansi.Colorize(name+" "+runtime.GOARCH, ctx.Theme.Muted)
+}
+
+// HostnameWidget displays the machine hostname (useful over SSH).
+type HostnameWidget struct{}
+
+func (w *HostnameWidget) ID() string { return "hostname" }
+
+func (w *HostnameWidget) Render(ctx *Context) string {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		return ""
+	}
+
+	if i := strings.IndexByte(host, '.'); i > 0 {
+		host = host[:i]
+	}
+
+	return ansi.Colorize(host, ctx.Theme.Muted)
 }
 
 // SeparatorWidget displays a visual separator.
@@ -55,14 +73,15 @@ func (w *SeparatorWidget) ID() string { return "separator" }
 
 func (w *SeparatorWidget) Render(ctx *Context) string {
 	char := ctx.Config.Widgets.Separator.Char
+
 	if char == "" {
-		char = "\u2502"
+		char = "│"
 	}
 
 	return ansi.Colorize(" "+char+" ", ctx.Theme.Separator)
 }
 
-// SpacerWidget adds flexible space.
+// SpacerWidget adds a single space between widgets.
 type SpacerWidget struct{}
 
 func (w *SpacerWidget) ID() string { return "spacer" }
@@ -75,41 +94,42 @@ type VimModeWidget struct{}
 func (w *VimModeWidget) ID() string { return "vim-mode" }
 
 func (w *VimModeWidget) Render(ctx *Context) string {
-	if ctx.Input.Vim == nil {
+	if ctx.Input.Vim == nil || ctx.Input.Vim.Mode == "" {
 		return ""
 	}
 
 	mode := strings.ToUpper(ctx.Input.Vim.Mode)
 	color := ctx.Theme.Info
 
-	if mode == "INSERT" {
+	switch {
+	case mode == "INSERT":
 		color = ctx.Theme.Success
+	case strings.HasPrefix(mode, "VISUAL"):
+		color = ctx.Theme.Warning
 	}
 
 	return ansi.ColorBold(mode, color)
 }
 
-// LinesChangedWidget displays lines added/removed from git diff.
-// It sums changes across the root repo and any nested git repos.
+// LinesChangedWidget displays lines added/removed.
+// Source "git" sums the working tree diff of the project and nested repos;
+// source "session" uses the counters reported by Claude Code.
 type LinesChangedWidget struct{}
 
 func (w *LinesChangedWidget) ID() string { return "lines-changed" }
 
 func (w *LinesChangedWidget) Render(ctx *Context) string {
-	dir := projectDir(ctx)
-	added, removed := gitDiffStats(dir)
+	var added, removed int
 
-	// Find nested repos and sum their stats
-	nestedDirs := findNestedRepos(dir)
-
-	for _, nested := range nestedDirs {
-		a, r := gitDiffStats(nested)
-		added += a
-		removed += r
+	if ctx.Config.Widgets.LinesChanged.Source == "session" {
+		added = ctx.Input.Cost.TotalLinesAdded
+		removed = ctx.Input.Cost.TotalLinesRemoved
+	} else {
+		added, removed = workingTreeStats(projectDir(ctx))
 	}
 
 	if added == 0 && removed == 0 {
-		return ansi.Colorize("+0", ctx.Theme.Muted) + " " + ansi.Colorize("-0", ctx.Theme.Muted)
+		return ansi.Colorize("+0 -0", ctx.Theme.Muted)
 	}
 
 	return ansi.Colorize(fmt.Sprintf("+%d", added), ctx.Theme.Success) +
@@ -117,28 +137,12 @@ func (w *LinesChangedWidget) Render(ctx *Context) string {
 		ansi.Colorize(fmt.Sprintf("-%d", removed), ctx.Theme.Danger)
 }
 
-func gitDiffStats(dir string) (int, int) {
-	out, err := gitCommand(dir, "--no-optional-locks", "diff", "--numstat")
-	if err != nil || out == "" {
-		return 0, 0
-	}
+// workingTreeStats sums diff stats across the root repo and any nested repos.
+func workingTreeStats(dir string) (int, int) {
+	added, removed := gitDiffStats(dir)
 
-	added := 0
-	removed := 0
-
-	for _, line := range strings.Split(out, "\n") {
-		parts := strings.Fields(line)
-		if len(parts) < 2 {
-			continue
-		}
-
-		// Binary files show "-" instead of numbers
-		if parts[0] == "-" || parts[1] == "-" {
-			continue
-		}
-
-		a := atoi(parts[0])
-		r := atoi(parts[1])
+	for _, nested := range findNestedRepos(dir) {
+		a, r := gitDiffStats(nested)
 		added += a
 		removed += r
 	}
@@ -146,45 +150,36 @@ func gitDiffStats(dir string) (int, int) {
 	return added, removed
 }
 
-func findNestedRepos(rootDir string) []string {
-	cmd := exec.Command("find", ".", "-maxdepth", "3", "-name", ".git", "-type", "d")
-	cmd.Dir = rootDir
-
-	out, err := cmd.Output()
-	if err != nil {
-		return nil
+func gitDiffStats(dir string) (int, int) {
+	out, err := gitCommand(dir, "diff", "--numstat")
+	if err != nil || out == "" {
+		return 0, 0
 	}
 
-	var dirs []string
-
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line == "" || line == "./.git" {
-			continue
-		}
-
-		// Strip "/.git" suffix to get the repo dir
-		repoDir := strings.TrimSuffix(line, "/.git")
-
-		if repoDir == "." {
-			continue
-		}
-
-		dirs = append(dirs, filepath.Join(rootDir, repoDir))
-	}
-
-	return dirs
+	return parseNumstat(out)
 }
 
-func atoi(s string) int {
-	n := 0
+// parseNumstat sums the added/removed columns of `git diff --numstat` output.
+func parseNumstat(out string) (int, int) {
+	added, removed := 0, 0
 
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
 		}
 
-		n = n*10 + int(c-'0')
+		// Binary files show "-" instead of numbers.
+		a, errA := strconv.Atoi(parts[0])
+		r, errR := strconv.Atoi(parts[1])
+
+		if errA != nil || errR != nil {
+			continue
+		}
+
+		added += a
+		removed += r
 	}
 
-	return n
+	return added, removed
 }

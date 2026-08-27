@@ -74,6 +74,18 @@ The JSON input includes:
 | `session_id` | string | Session identifier |
 | `version` | string | Claude Code version |
 | `exceeds_200k_tokens` | bool | Whether context exceeds 200k |
+| `fast_mode` | bool | Fast mode enabled |
+| `effort.level` | string | Reasoning effort (low, medium, high, xhigh, max) |
+| `thinking.enabled` | bool | Extended thinking enabled |
+| `rate_limits.five_hour` / `seven_day` | object | Rate limit windows (`used_percentage`, `resets_at`) |
+| `agent.name` | string | Active agent (`--agent`) |
+| `output_style.name` | string | Output style |
+| `session_name` | string | Session name/title |
+| `workspace.repo.{host,owner,name}` | object | Remote repository |
+| `workspace.git_worktree` / `worktree.*` | object | Worktree session info |
+| `pr.{number,url,review_state,kind}` | object | Open PR/MR for the current branch |
+
+Reference: https://code.claude.com/docs/en/statusline
 
 ### 2.3 Tech Stack
 

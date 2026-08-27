@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install
+.PHONY: build test lint fmt check clean install release-dry
 
 BINARY_NAME=claude-code-status-line
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -10,7 +10,12 @@ test:
 	go test ./...
 
 lint:
-	golangci-lint run
+	golangci-lint run ./...
+
+fmt:
+	gofmt -w cmd internal
+
+check: fmt lint test
 
 clean:
 	rm -f $(BINARY_NAME)

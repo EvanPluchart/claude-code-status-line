@@ -18,6 +18,7 @@ import (
 	"github.com/EvanPluchart/claude-code-status-line/internal/engine"
 	"github.com/EvanPluchart/claude-code-status-line/internal/exchange"
 	"github.com/EvanPluchart/claude-code-status-line/internal/parser"
+	"github.com/EvanPluchart/claude-code-status-line/internal/widgets"
 	"github.com/EvanPluchart/claude-code-status-line/internal/wizard"
 )
 
@@ -40,6 +41,10 @@ func main() {
 		configCmd()
 	case "update-rates":
 		updateRatesCmd()
+	case "preview":
+		previewCmd()
+	case "widgets":
+		widgetsCmd()
 	case "update":
 		updateCmd()
 	case "uninstall":
@@ -328,10 +333,7 @@ func registerInClaude() {
 		fmt.Fprintln(os.Stderr, "  Previous statusline configuration backed up.")
 	}
 
-	settings["statusLine"] = map[string]interface{}{
-		"type":    "command",
-		"command": "claude-code-status-line",
-	}
+	settings["statusLine"] = statusLineSettings(config.Load())
 
 	out, _ := json.MarshalIndent(settings, "", "  ")
 
@@ -342,6 +344,22 @@ func registerInClaude() {
 	}
 
 	fmt.Fprintln(os.Stderr, "  Registered in Claude Code settings.")
+}
+
+// statusLineSettings builds the "statusLine" entry for Claude Code settings.
+// The built-in vim indicator is hidden when the vim-mode widget renders it instead.
+func statusLineSettings(cfg *config.Config) map[string]interface{} {
+	entry := map[string]interface{}{
+		"type":    "command",
+		"command": "claude-code-status-line",
+		"padding": 0,
+	}
+
+	if cfg.UsesWidget("vim-mode") {
+		entry["hideVimModeIndicator"] = true
+	}
+
+	return entry
 }
 
 func uninstall() {
@@ -456,7 +474,7 @@ func fetchLatestVersion() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch release info: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -489,7 +507,7 @@ func selfUpdate(execPath, latest string) error {
 	if err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download returned status %d", resp.StatusCode)
@@ -499,7 +517,7 @@ func selfUpdate(execPath, latest string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	binaryName := "claude-code-status-line"
 	if goos == "windows" {
@@ -547,7 +565,7 @@ func downloadAsset(tag, assetName string) (*http.Response, error) {
 		return resp, nil
 	}
 	if resp != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 
 	// For private repos, find asset via API and download with octet-stream accept header
@@ -556,7 +574,7 @@ func downloadAsset(tag, assetName string) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var release struct {
 		Assets []struct {
@@ -583,7 +601,7 @@ func downloadAsset(tag, assetName string) (*http.Response, error) {
 				return nil, fmt.Errorf("failed to download asset: %w", err)
 			}
 			if resp.StatusCode != http.StatusOK {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				return nil, fmt.Errorf("asset download returned status %d", resp.StatusCode)
 			}
 			return resp, nil
@@ -598,7 +616,7 @@ func extractTarGz(r io.Reader, destDir, binaryName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to decompress: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -617,10 +635,10 @@ func extractTarGz(r io.Reader, destDir, binaryName string) (string, error) {
 				return "", fmt.Errorf("failed to create file: %w", err)
 			}
 			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
+				_ = out.Close()
 				return "", fmt.Errorf("failed to extract binary: %w", err)
 			}
-			out.Close()
+			_ = out.Close()
 			return outPath, nil
 		}
 	}
@@ -634,19 +652,19 @@ func extractZip(r io.Reader, destDir, binaryName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := io.Copy(tmpFile, r); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return "", fmt.Errorf("failed to write archive: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	zr, err := zip.OpenReader(tmpFile.Name())
 	if err != nil {
 		return "", fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 
 	for _, f := range zr.File {
 		if filepath.Base(f.Name) == binaryName {
@@ -654,7 +672,7 @@ func extractZip(r io.Reader, destDir, binaryName string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("failed to read zip entry: %w", err)
 			}
-			defer rc.Close()
+			defer func() { _ = rc.Close() }()
 
 			outPath := filepath.Join(destDir, binaryName)
 			out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0o755)
@@ -662,10 +680,10 @@ func extractZip(r io.Reader, destDir, binaryName string) (string, error) {
 				return "", fmt.Errorf("failed to create file: %w", err)
 			}
 			if _, err := io.Copy(out, rc); err != nil {
-				out.Close()
+				_ = out.Close()
 				return "", fmt.Errorf("failed to extract binary: %w", err)
 			}
-			out.Close()
+			_ = out.Close()
 			return outPath, nil
 		}
 	}
@@ -686,15 +704,63 @@ func refreshExchangeRates() {
 }
 
 func updateRatesCmd() {
-	fmt.Fprintln(os.Stderr, "Refreshing exchange rates...")
+	isQuiet := len(os.Args) > 2 && os.Args[2] == "--quiet"
+
+	if !isQuiet {
+		fmt.Fprintln(os.Stderr, "Refreshing exchange rates...")
+	}
 
 	if err := exchange.Refresh(); err != nil {
+		if isQuiet {
+			os.Exit(1)
+		}
+
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		fmt.Fprintln(os.Stderr, "Fallback rates will be used.")
 		os.Exit(1)
 	}
 
-	fmt.Fprintln(os.Stderr, "Exchange rates updated.")
+	if !isQuiet {
+		fmt.Fprintln(os.Stderr, "Exchange rates updated.")
+	}
+}
+
+// previewCmd renders the current config with sample data, or with the JSON payload
+// read from stdin when "--stdin" is passed.
+func previewCmd() {
+	cfg, err := config.LoadFrom(config.ConfigPath())
+	if err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "Warning: %v (using defaults)\n", err)
+	}
+
+	input := wizard.SampleInput()
+
+	if len(os.Args) > 2 && os.Args[2] == "--stdin" {
+		data, readErr := io.ReadAll(os.Stdin)
+		if readErr != nil || len(data) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: no JSON payload on stdin")
+			os.Exit(1)
+		}
+
+		parsed, parseErr := parser.Parse(data)
+		if parseErr != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid JSON input: %v\n", parseErr)
+			os.Exit(1)
+		}
+
+		fmt.Print(engine.Render(parsed, cfg))
+
+		return
+	}
+
+	fmt.Print(wizard.RenderPreview(cfg, input))
+}
+
+// widgetsCmd lists all available widget IDs.
+func widgetsCmd() {
+	for _, id := range widgets.IDs() {
+		fmt.Println(id)
+	}
 }
 
 func printHelp() {
@@ -707,6 +773,8 @@ Commands:
   render        Render the statusline (default, reads stdin)
   init          Interactive setup (config + register in Claude Code)
   config        Edit configuration
+  preview       Render the current config with sample data (--stdin: use a JSON payload)
+  widgets       List all available widget IDs
   update        Update to the latest version
   update-rates  Refresh exchange rates cache
   uninstall     Remove config and unregister from Claude Code

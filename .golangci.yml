@@ -1,18 +1,20 @@
+version: "2"
+
 linters:
+  default: none
   enable:
     - errcheck
     - govet
     - staticcheck
     - unused
     - ineffassign
-    - gosimple
-    - gofmt
-    - goimports
     - misspell
 
-linters-settings:
-  goimports:
-    local-prefixes: github.com/EvanPluchart/claude-code-status-line
-
-issues:
-  exclude-use-default: false
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/EvanPluchart/claude-code-status-line

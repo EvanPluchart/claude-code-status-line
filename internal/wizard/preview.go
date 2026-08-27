@@ -6,42 +6,57 @@ import (
 
 	"github.com/EvanPluchart/claude-code-status-line/internal/ansi"
 	"github.com/EvanPluchart/claude-code-status-line/internal/config"
+	"github.com/EvanPluchart/claude-code-status-line/internal/engine"
 	"github.com/EvanPluchart/claude-code-status-line/internal/parser"
 	"github.com/EvanPluchart/claude-code-status-line/internal/themes"
-	"github.com/EvanPluchart/claude-code-status-line/internal/widgets"
 )
 
 // previewPlaceholders provides fallback text for widgets that need
 // external resources (git, etc.) unavailable during preview.
-var previewPlaceholders = map[string]func(themes.Theme) string{
+var previewPlaceholders = map[string]engine.Placeholder{
 	"git-branch": func(t themes.Theme) string {
-		return ansi.Colorize("main", t.Info)
+		return ansi.Colorize("feature/auth", t.Info)
 	},
 	"git-status": func(t themes.Theme) string {
-		return ansi.Colorize("\u2713", t.Success)
+		return ansi.Colorize("✓", t.Success)
+	},
+	"git-changes": func(t themes.Theme) string {
+		return ansi.Colorize("●2", t.Success) + " " + ansi.Colorize("✚1", t.Warning)
+	},
+	"git-ahead-behind": func(t themes.Theme) string {
+		return ansi.Colorize("↑2", t.Success)
 	},
 	"nested-repos": func(t themes.Theme) string {
 		return ansi.Colorize("2 repos", t.Muted)
 	},
+	"lines-changed": func(t themes.Theme) string {
+		return ansi.Colorize("+42", t.Success) + " " + ansi.Colorize("-7", t.Danger)
+	},
 }
 
-// sampleInput returns a realistic Input for preview rendering.
-func sampleInput() *parser.Input {
+// SampleInput returns a realistic Input for preview rendering.
+func SampleInput() *parser.Input {
 	return &parser.Input{
-		CWD:       "/home/user/my-project",
-		SessionID: "preview-session",
+		CWD:         "/home/user/projects/my-project",
+		SessionID:   "preview-session",
+		SessionName: "Add OAuth login flow",
+		Version:     "2.1.90",
 		Model: parser.Model{
-			ID:          "claude-opus-4-6",
-			DisplayName: "Opus 4.6",
+			ID:          "claude-opus-5",
+			DisplayName: "Opus",
 		},
 		Workspace: parser.Workspace{
-			CurrentDir: "/home/user/my-project",
-			ProjectDir: "/home/user/my-project",
+			CurrentDir: "/home/user/projects/my-project",
+			ProjectDir: "/home/user/projects/my-project",
+			Repo:       &parser.Repo{Host: "github.com", Owner: "acme", Name: "my-project"},
 		},
+		OutputStyle: &parser.OutputStyle{Name: "default"},
 		Cost: parser.Cost{
-			TotalCostUSD:    0.42,
-			TotalDurationMS: 754000, // 12m34s
-			TotalLinesAdded: 42, TotalLinesRemoved: 7,
+			TotalCostUSD:       0.42,
+			TotalDurationMS:    754000, // 12m34s
+			TotalAPIDurationMS: 312000,
+			TotalLinesAdded:    42,
+			TotalLinesRemoved:  7,
 		},
 		ContextWindow: parser.ContextWindow{
 			ContextWindowSize: 200000,
@@ -50,12 +65,14 @@ func sampleInput() *parser.Input {
 			TotalInputTokens:  75000,
 			TotalOutputTokens: 15000,
 			CurrentUsage: &parser.CurrentUsage{
-				InputTokens:              70000,
-				OutputTokens:             20000,
+				InputTokens:              55000,
+				OutputTokens:             2000,
 				CacheCreationInputTokens: 5000,
 				CacheReadInputTokens:     30000,
 			},
 		},
+		Effort:   &parser.Effort{Level: "high"},
+		Thinking: &parser.Thinking{Enabled: true},
 		RateLimits: &parser.RateLimits{
 			FiveHour: &parser.RateLimit{
 				UsedPercentage: 23.5,
@@ -66,7 +83,8 @@ func sampleInput() *parser.Input {
 				ResetsAt:       time.Now().Add(4*24*time.Hour + 8*time.Hour).Unix(),
 			},
 		},
-		Vim: &parser.Vim{Mode: "normal"},
+		Vim: &parser.Vim{Mode: "NORMAL"},
+		PR:  &parser.PullRequest{Number: 1234, ReviewState: "pending"},
 	}
 }
 
@@ -75,13 +93,17 @@ func withSeparators(wids []string) []string {
 	if len(wids) == 0 {
 		return nil
 	}
+
 	result := make([]string, 0, len(wids)*2-1)
+
 	for i, w := range wids {
 		if i > 0 {
 			result = append(result, "separator")
 		}
+
 		result = append(result, w)
 	}
+
 	return result
 }
 
@@ -104,76 +126,45 @@ func buildPreviewConfig(m *Model) *config.Config {
 	applySelection(StepTheme, func(v string) { cfg.Theme = v })
 	applySelection(StepCurrency, func(v string) { cfg.Widgets.Cost.Currency = v })
 
-	// Apply widget lines from toggle order, auto-inserting separators
+	// Apply widget lines from toggle order, auto-inserting separators.
 	lines := []config.LineConfig{{}, {}, {}}
+
 	for i, step := range []StepID{StepLine1, StepLine2, StepLine3} {
 		if order, ok := m.toggleOrder[step]; ok {
 			lines[i].Widgets = withSeparators(order)
 		}
 	}
+
 	cfg.Lines = lines
 
 	return cfg
 }
 
-// renderPreviewLines renders the statusline with placeholder fallbacks
-// for widgets that return empty (e.g. git widgets without a real repo).
-func renderPreviewLines(cfg *config.Config, input *parser.Input) string {
-	theme := themes.Get(cfg.Theme)
-	ctx := &widgets.Context{
-		Input:  input,
-		Config: cfg,
-		Theme:  theme,
-	}
-
-	var lines []string
-	for _, line := range cfg.Lines {
-		if len(line.Widgets) == 0 {
-			continue
-		}
-		var parts []string
-		for _, wid := range line.Widgets {
-			w := widgets.Get(wid)
-			if w == nil {
-				continue
-			}
-			rendered := w.Render(ctx)
-			if rendered == "" {
-				if ph, ok := previewPlaceholders[wid]; ok {
-					rendered = ph(theme)
-				}
-			}
-			if rendered != "" {
-				parts = append(parts, rendered)
-			}
-		}
-		if len(parts) > 0 {
-			lines = append(lines, strings.Join(parts, ""))
-		}
-	}
-	if len(lines) == 0 {
-		return ""
-	}
-	return strings.Join(lines, "\n") + "\n"
+// RenderPreview renders the statusline with placeholder fallbacks
+// for widgets that need a real repository (git widgets).
+func RenderPreview(cfg *config.Config, input *parser.Input) string {
+	return engine.RenderWith(input, cfg, previewPlaceholders)
 }
 
 // renderPreview renders the statusline preview inside a box.
 func renderPreview(m *Model) string {
 	cfg := buildPreviewConfig(m)
-	input := sampleInput()
-	raw := renderPreviewLines(cfg, input)
+	raw := RenderPreview(cfg, SampleInput())
 
 	if raw == "" {
 		raw = "  (no widgets selected)\n"
 	}
 
 	var b strings.Builder
+
 	b.WriteString("  \x1b[2m╭─ Preview ─────────────────────────────────────────╮\x1b[0m\n")
+
 	for _, line := range strings.Split(strings.TrimRight(raw, "\n"), "\n") {
 		b.WriteString("  \x1b[2m│\x1b[0m ")
 		b.WriteString(line)
 		b.WriteByte('\n')
 	}
+
 	b.WriteString("  \x1b[2m╰───────────────────────────────────────────────────╯\x1b[0m")
 
 	return b.String()

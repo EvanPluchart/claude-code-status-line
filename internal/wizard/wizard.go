@@ -12,14 +12,14 @@ import (
 
 // Model is the bubbletea model for the wizard.
 type Model struct {
-	steps      []StepDef
-	stepIndex  int
-	cursor     int
-	scroll     int        // scroll offset for long lists
-	maxVisible int        // max visible items
-	selections map[StepID]string          // single-select results
-	toggled    map[StepID]map[string]bool // multi-select state
-	toggleOrder map[StepID][]string       // ordered widget list per step
+	steps       []StepDef
+	stepIndex   int
+	cursor      int
+	scroll      int                        // scroll offset for long lists
+	maxVisible  int                        // max visible items
+	selections  map[StepID]string          // single-select results
+	toggled     map[StepID]map[string]bool // multi-select state
+	toggleOrder map[StepID][]string        // ordered widget list per step
 
 	confirmed bool
 	cancelled bool
@@ -33,7 +33,7 @@ func newModel(existing *config.Config, isInit bool) Model {
 		selections:  make(map[StepID]string),
 		toggled:     make(map[StepID]map[string]bool),
 		toggleOrder: make(map[StepID][]string),
-		maxVisible:  12,
+		maxVisible:  14,
 		isInit:      isInit,
 	}
 
@@ -212,7 +212,7 @@ func (m Model) View() string {
 	b.WriteString("\n")
 
 	// Step title
-	b.WriteString(fmt.Sprintf("  Step %d/%d: %s\n\n", m.stepIndex+1, len(m.steps), step.Title))
+	fmt.Fprintf(&b, "  Step %d/%d: %s\n\n", m.stepIndex+1, len(m.steps), step.Title)
 
 	// Choices
 	if step.ID == StepConfirm {
@@ -253,9 +253,9 @@ func (m Model) renderSingleSelect(b *strings.Builder, step StepDef) {
 	for i := m.scroll; i < end; i++ {
 		c := step.Choices[i]
 		if i == m.cursor {
-			b.WriteString(fmt.Sprintf("    \x1b[36m❯\x1b[0m \x1b[1m%-14s\x1b[0m %s\n", c.Value, c.Label))
+			fmt.Fprintf(b, "    \x1b[36m❯\x1b[0m \x1b[1m%-14s\x1b[0m %s\n", c.Value, c.Label)
 		} else {
-			b.WriteString(fmt.Sprintf("      %-14s \x1b[2m%s\x1b[0m\n", c.Value, c.Label))
+			fmt.Fprintf(b, "      %-14s \x1b[2m%s\x1b[0m\n", c.Value, c.Label)
 		}
 	}
 
@@ -273,12 +273,12 @@ func (m Model) renderMultiSelect(b *strings.Builder, step StepDef) {
 	// Show selected count and order
 	order := m.toggleOrder[step.ID]
 	if len(order) > 0 {
-		b.WriteString(fmt.Sprintf("    \x1b[2mSelected (%d/%d):\x1b[0m ", len(order), maxWidgetsPerLine))
+		fmt.Fprintf(b, "    \x1b[2mSelected (%d/%d):\x1b[0m ", len(order), maxWidgetsPerLine)
 		for i, w := range order {
 			if i > 0 {
 				b.WriteString(" \x1b[2m→\x1b[0m ")
 			}
-			b.WriteString(fmt.Sprintf("\x1b[36m%s\x1b[0m", w))
+			fmt.Fprintf(b, "\x1b[36m%s\x1b[0m", w)
 		}
 		b.WriteString("\n\n")
 	}
@@ -301,9 +301,9 @@ func (m Model) renderMultiSelect(b *strings.Builder, step StepDef) {
 		}
 
 		if i == m.cursor {
-			b.WriteString(fmt.Sprintf("    %s%s \x1b[1m%-16s\x1b[0m %s\n", cursor, box, c.Value, c.Label))
+			fmt.Fprintf(b, "    %s%s \x1b[1m%-16s\x1b[0m %s\n", cursor, box, c.Value, c.Label)
 		} else {
-			b.WriteString(fmt.Sprintf("    %s%s %-16s \x1b[2m%s\x1b[0m\n", cursor, box, c.Value, c.Label))
+			fmt.Fprintf(b, "    %s%s %-16s \x1b[2m%s\x1b[0m\n", cursor, box, c.Value, c.Label)
 		}
 	}
 
@@ -327,7 +327,7 @@ func (m Model) renderConfirmView(b *strings.Builder, step StepDef) {
 	for i, sid := range []StepID{StepLine1, StepLine2, StepLine3} {
 		order := m.toggleOrder[sid]
 		label := fmt.Sprintf("Line %d:", i+1)
-		b.WriteString(fmt.Sprintf("    \x1b[2m%-11s\x1b[0m", label))
+		fmt.Fprintf(b, "    \x1b[2m%-11s\x1b[0m", label)
 		if len(order) == 0 {
 			b.WriteString("\x1b[2m(empty)\x1b[0m")
 		} else {
@@ -340,9 +340,9 @@ func (m Model) renderConfirmView(b *strings.Builder, step StepDef) {
 
 	for i, c := range step.Choices {
 		if i == m.cursor {
-			b.WriteString(fmt.Sprintf("    \x1b[36m❯\x1b[0m \x1b[1m%s\x1b[0m\n", c.Label))
+			fmt.Fprintf(b, "    \x1b[36m❯\x1b[0m \x1b[1m%s\x1b[0m\n", c.Label)
 		} else {
-			b.WriteString(fmt.Sprintf("      \x1b[2m%s\x1b[0m\n", c.Label))
+			fmt.Fprintf(b, "      \x1b[2m%s\x1b[0m\n", c.Label)
 		}
 	}
 }
@@ -395,6 +395,9 @@ func Run(existing *config.Config, isInit bool) (*config.Config, bool, error) {
 	cfg.Widgets.Separator = existing.Widgets.Separator
 	cfg.Widgets.Model = existing.Widgets.Model
 	cfg.Widgets.Timestamp = existing.Widgets.Timestamp
+	cfg.Widgets.LinesChanged = existing.Widgets.LinesChanged
+	cfg.Widgets.Directory = existing.Widgets.Directory
+	cfg.Widgets.Git = existing.Widgets.Git
 	cfg.Widgets.Cost.Decimals = existing.Widgets.Cost.Decimals
 	cfg.Thresholds = existing.Thresholds
 
