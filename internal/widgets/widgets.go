@@ -70,6 +70,7 @@ func init() {
 	// Rate limits
 	register(&SessionUsageWidget{})
 	register(&WeeklyUsageWidget{})
+	register(&ModelUsageWidget{})
 
 	// Layout & system
 	register(&OSInfoWidget{})

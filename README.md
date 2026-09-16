@@ -122,6 +122,18 @@ Run `claude-code-status-line widgets` to list them from the CLI.
 | `exceeds-200k` | Marker when the conversation exceeds 200k tokens | `>200k` |
 | `session-usage` | 5-hour rate limit (Pro/Max) | `5h ━━━━──── 23% (reset 3h42m)` |
 | `weekly-usage` | 7-day rate limit (Pro/Max) | `7d ━━━━━━── 41% (reset 4d08h)` |
+| `model-usage` | Per-model weekly limits (see note below) | `Fable ━─────── 6% (reset 5d12h)` |
+
+> **`model-usage` requires an extra opt-in.** Claude Code only sends the 5-hour and 7-day windows
+> to statusline commands — the per-model windows (the separate *Fable* bar on
+> [claude.ai usage](https://claude.ai/settings/usage)) are not part of the payload. When you add this
+> widget to your config, the statusline reads your local Claude Code OAuth token (macOS Keychain, or
+> `~/.claude/.credentials.json`) and queries `api.anthropic.com/api/oauth/usage` — the same endpoint
+> Claude Code's own `/usage` panel calls — from a detached background process, at most once every
+> 5 minutes. The token never leaves your machine except to Anthropic, and is never written to the
+> cache (`~/.claude-statusline/usage.json`, mode `0600`) nor logged. No other widget reads
+> credentials, and the render path itself never makes network calls. Set `CLAUDE_STATUSLINE_OFFLINE=1`
+> to disable all background refreshes.
 
 ### Layout & system
 
@@ -236,6 +248,11 @@ Claude Code runs the binary with a JSON payload on stdin (model, cost, context w
 ```
 
 When the `vim-mode` widget is enabled, `hideVimModeIndicator` is also set so the mode is not displayed twice.
+
+Rendering never performs network calls, so the statusline stays within its execution budget. Two
+caches are refreshed by detached background processes instead: exchange rates (`update-rates`, daily)
+and, only when the `model-usage` widget is enabled, per-model usage limits (`update-usage`, every
+5 minutes). Both can be run by hand, and both are disabled by `CLAUDE_STATUSLINE_OFFLINE=1`.
 
 ## Uninstall
 

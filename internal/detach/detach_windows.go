@@ -1,6 +1,6 @@
 //go:build windows
 
-package exchange
+package detach
 
 import (
 	"os/exec"
@@ -12,7 +12,7 @@ const (
 	detachedProcess       = 0x00000008
 )
 
-// detach configures the command to run detached from the parent console.
-func detach(cmd *exec.Cmd) {
+// configure configures the command to run detached from the parent console.
+func configure(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNewProcessGroup | detachedProcess}
 }
