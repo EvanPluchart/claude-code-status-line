@@ -60,7 +60,7 @@ func TestRegistryContainsAllWidgets(t *testing.T) {
 		"directory", "repo", "worktree", "git-branch", "git-status", "git-changes", "git-ahead-behind", "pr", "nested-repos", "lines-changed",
 		"cost", "burn-rate", "duration", "api-time", "timestamp",
 		"token-bar", "context-percent", "token-count", "context-remaining", "total-tokens", "cache-ratio", "exceeds-200k",
-		"session-usage", "weekly-usage", "os-info", "hostname", "separator", "spacer",
+		"session-usage", "weekly-usage", "model-usage", "os-info", "hostname", "separator", "spacer",
 	}
 
 	for _, id := range expected {

@@ -10,12 +10,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/EvanPluchart/claude-code-status-line/internal/config"
+	"github.com/EvanPluchart/claude-code-status-line/internal/detach"
 )
 
 const (
@@ -98,23 +98,7 @@ func scheduleRefresh() {
 		return
 	}
 
-	self, err := os.Executable()
-	if err != nil {
-		return
-	}
-
-	cmd := exec.Command(self, "update-rates", "--quiet")
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	detach(cmd)
-
-	if err := cmd.Start(); err != nil {
-		return
-	}
-
-	// Release the child so it outlives this process.
-	_ = cmd.Process.Release()
+	_ = detach.Spawn("update-rates", "--quiet")
 }
 
 func fetchRates() (map[string]float64, error) {

@@ -18,6 +18,7 @@ import (
 	"github.com/EvanPluchart/claude-code-status-line/internal/engine"
 	"github.com/EvanPluchart/claude-code-status-line/internal/exchange"
 	"github.com/EvanPluchart/claude-code-status-line/internal/parser"
+	"github.com/EvanPluchart/claude-code-status-line/internal/usage"
 	"github.com/EvanPluchart/claude-code-status-line/internal/widgets"
 	"github.com/EvanPluchart/claude-code-status-line/internal/wizard"
 )
@@ -41,6 +42,8 @@ func main() {
 		configCmd()
 	case "update-rates":
 		updateRatesCmd()
+	case "update-usage":
+		updateUsageCmd()
 	case "preview":
 		previewCmd()
 	case "widgets":
@@ -725,6 +728,36 @@ func updateRatesCmd() {
 	}
 }
 
+// updateUsageCmd refreshes the per-model usage cache. It is normally spawned detached by the
+// render path, with the Claude Code version to advertise as third argument.
+func updateUsageCmd() {
+	isQuiet := len(os.Args) > 2 && os.Args[2] == "--quiet"
+
+	userAgent := usage.UserAgent("")
+
+	if len(os.Args) > 3 {
+		userAgent = os.Args[3]
+	}
+
+	if !isQuiet {
+		fmt.Fprintln(os.Stderr, "Refreshing model usage limits...")
+	}
+
+	if err := usage.Refresh(userAgent); err != nil {
+		if isQuiet {
+			os.Exit(1)
+		}
+
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintln(os.Stderr, "The model-usage widget stays empty until a refresh succeeds.")
+		os.Exit(1)
+	}
+
+	if !isQuiet {
+		fmt.Fprintln(os.Stderr, "Model usage limits updated.")
+	}
+}
+
 // previewCmd renders the current config with sample data, or with the JSON payload
 // read from stdin when "--stdin" is passed.
 func previewCmd() {
@@ -777,6 +810,7 @@ Commands:
   widgets       List all available widget IDs
   update        Update to the latest version
   update-rates  Refresh exchange rates cache
+  update-usage  Refresh per-model usage limits cache
   uninstall     Remove config and unregister from Claude Code
   version       Show version
 
